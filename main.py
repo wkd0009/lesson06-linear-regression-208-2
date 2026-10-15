@@ -55,6 +55,16 @@ slope, intercept = np.polyfit(x, y, 1)
 r = float(np.corrcoef(x, y)[0, 1])
 start_year, end_year, n_years = int(x.min()), int(x.max()), len(yearly)
 
+# 최근 20년만으로 구한 회귀 직선
+RECENT_YEARS = 20
+recent = yearly[yearly["연도"] > end_year - RECENT_YEARS]
+has_recent = len(recent) >= 2
+if has_recent:
+    slope_recent, intercept_recent = np.polyfit(
+        recent["연도"].to_numpy(), recent["연평균기온"].to_numpy(), 1
+    )
+    recent_start = int(recent["연도"].min())
+
 # ---- 직선을 만든 데이터 정보 ----
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("직선을 만든 해의 개수", f"{n_years}개")
@@ -64,9 +74,55 @@ c4.metric("상관계수 (r)", f"{r:.3f}")
 
 st.caption(
     f"기준: {LAST_YEAR}년까지의 데이터, 관측일 {MIN_DAYS}일 이상인 해만 사용 · "
-    f"회귀 직선: 기온 = {slope:.4f} × 연도 + ({intercept:.2f}) "
-    f"(10년에 약 {slope * 10:+.2f}℃)"
+    f"회귀 직선: 기온 = {slope:.4f} × 연도 + ({intercept:.2f})"
 )
+
+# ---- 100년에 몇 도 오르는가: 전체 기간 vs 최근 20년 ----
+st.divider()
+st.subheader("🔥 100년에 몇 도 오를까?")
+
+
+def big_card(col, title, sub, value):
+    col.markdown(
+        f"""
+        <div style="text-align:center; padding:0.8rem 0;">
+            <div style="font-size:1.1rem; font-weight:600;">{title}</div>
+            <div style="font-size:0.9rem; opacity:0.65;">{sub}</div>
+            <div style="font-size:3.6rem; font-weight:800; line-height:1.25;">{value}</div>
+            <div style="font-size:0.9rem; opacity:0.65;">100년 기준</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+col_all, col_recent = st.columns(2)
+big_card(
+    col_all,
+    "전체 기간",
+    f"{start_year}~{end_year}년 ({n_years}개 해)",
+    f"{slope * 100:+.2f} ℃",
+)
+if has_recent:
+    big_card(
+        col_recent,
+        f"최근 {RECENT_YEARS}년",
+        f"{recent_start}~{end_year}년 ({len(recent)}개 해)",
+        f"{slope_recent * 100:+.2f} ℃",
+    )
+else:
+    col_recent.info(f"최근 {RECENT_YEARS}년 안에 쓸 수 있는 해가 2개 미만이에요.")
+
+if has_recent and slope > 0:
+    ratio = slope_recent / slope
+    st.info(
+        f"최근 {RECENT_YEARS}년의 기울기는 전체 기간의 약 **{ratio:.1f}배**예요. "
+        "다만 20년은 짧은 기간이라 해마다의 들쭉날쭉함에 크게 흔들릴 수 있어요."
+    )
+elif has_recent:
+    st.info(
+        "두 기울기를 비교해 보세요. 20년은 짧은 기간이라 해마다의 들쭉날쭉함에 크게 흔들릴 수 있어요."
+    )
 
 # ---- 연도 슬라이더 & 예상 기온 ----
 st.divider()
@@ -113,6 +169,17 @@ fig.add_trace(
         line=dict(width=3, dash="dash"),
     )
 )
+if has_recent:
+    rx = np.array([recent_start, end_year])
+    fig.add_trace(
+        go.Scatter(
+            x=rx,
+            y=slope_recent * rx + intercept_recent,
+            mode="lines",
+            name=f"최근 {RECENT_YEARS}년 직선",
+            line=dict(width=3, dash="dot"),
+        )
+    )
 fig.add_trace(
     go.Scatter(
         x=[year],
